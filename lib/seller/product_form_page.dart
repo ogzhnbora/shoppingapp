@@ -17,12 +17,15 @@ class _ProductFormPageState extends State<ProductFormPage> {
   String _imageUrl = '';
   double _price = 0.0;
   String _gender = 'Unisex';
-  List<String> _sizes = [];
+  String _category = 'Tişört'; // Varsayılan kategori
+  List<String> _selectedSizes = [];
   String _fit = 'Regular Fit';
   String? userID;
   File? _imageFile;
 
   final List<String> _availableSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+  final List<String> _categories = ['Tişört', 'Sweatshirt', 'Pantolon', 'Ceket', 'Elbise', 'Şort', 'Etek', 'Gömlek', 'Eşofman','Kazak','Mont','Bluz','Büstiyer'];
+  Map<String, int> _sizeStocks = {};
 
   @override
   void initState() {
@@ -79,16 +82,18 @@ class _ProductFormPageState extends State<ProductFormPage> {
   Future<void> _addProduct() async {
     if (_formKey.currentState!.validate() && userID != null) {
       _formKey.currentState!.save();
-      await _uploadImage();  // Fotoğrafı yükleyin ve URL'yi alın
+      await _uploadImage();
       String productId = generateRandomID(10);
       await FirebaseFirestore.instance.collection('products').doc(productId).set({
-        'productId': productId,  // productId kaydediliyor
+        'productId': productId,
         'name': _name,
         'imageUrl': _imageUrl,
         'price': _price,
         'gender': _gender,
-        'sizes': _sizes,
+        'category': _category, // Yeni kategori alanı
+        'sizes': _selectedSizes,
         'fit': _fit,
+        'sizeStocks': _sizeStocks,
         'userID': userID,
       });
       Navigator.pop(context);
@@ -136,16 +141,16 @@ class _ProductFormPageState extends State<ProductFormPage> {
                         _price = double.parse(value!);
                       },
                     ),
-                    SizedBox(height: 20),
+                    SizedBox(height: 15),
                     DropdownButtonFormField<String>(
                       value: _gender,
-                      items: ['Erkek', 'Kadın', 'Unisex'].map((String category) {
+                      items: ['Erkek', 'Kadın', 'Unisex'].map((String gender) {
                         return DropdownMenuItem<String>(
-                          value: category,
-                          child: Text(category),
+                          value: gender,
+                          child: Text(gender),
                         );
                       }).toList(),
-                      decoration: InputDecoration(labelText: 'Ürün Cinsiyeti'),
+                      decoration: InputDecoration(labelText: 'Cinsiyet'),
                       onChanged: (newValue) {
                         setState(() {
                           _gender = newValue!;
@@ -153,54 +158,88 @@ class _ProductFormPageState extends State<ProductFormPage> {
                       },
                     ),
                     SizedBox(height: 15),
-                    Text('Ürün Bedeni', style: TextStyle(fontSize: 16)),
+                    DropdownButtonFormField<String>(
+                      value: _category,
+                      items: _categories.map((String category) {
+                        return DropdownMenuItem<String>(
+                          value: category,
+                          child: Text(category),
+                        );
+                      }).toList(),
+                      decoration: InputDecoration(labelText: 'Kategori'),
+                      onChanged: (newValue) {
+                        setState(() {
+                          _category = newValue!;
+                        });
+                      },
+                    ),
+                    SizedBox(height: 15),
+                    Text('Beden Seçimi', style: TextStyle(fontSize: 16)),
                     Wrap(
                       spacing: 10,
                       children: _availableSizes.map((size) {
-                        bool isSelected = _sizes.contains(size);
-                        return GestureDetector(
-                          onTap: () {
+                        bool isSelected = _selectedSizes.contains(size);
+                        return FilterChip(
+                          label: Text(size),
+                          selected: isSelected,
+                          onSelected: (selected) {
                             setState(() {
-                              if (isSelected) {
-                                _sizes.remove(size);
+                              if (selected) {
+                                _selectedSizes.add(size);
                               } else {
-                                _sizes.add(size);
+                                _selectedSizes.remove(size);
+                                _sizeStocks.remove(size);
                               }
                             });
                           },
-                          child: Container(
-                            padding: EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey),
-                              borderRadius: BorderRadius.circular(5),
-                              color: isSelected ? Color.fromARGB(255, 102, 59, 104) : Colors.white,
-                            ),
-                            child: Text(
-                              size,
-                              style: TextStyle(
-                                color: isSelected ? Colors.white : Colors.black,
-                              ),
-                            ),
-                          ),
                         );
                       }).toList(),
                     ),
                     SizedBox(height: 15),
-                    DropdownButtonFormField<String>(
-                      value: _fit,
-                      items: ['Regular Fit', 'Oversize Fit', 'Slim Fit', 'Relaxed Fit'].map((String fit) {
-                        return DropdownMenuItem<String>(
-                          value: fit,
-                          child: Text(fit),
-                        );
-                      }).toList(),
-                      decoration: InputDecoration(labelText: 'Ürün Kalıbı'),
-                      onChanged: (newValue) {
-                        setState(() {
-                          _fit = newValue!;
-                        });
-                      },
-                    ),
+                    if (_selectedSizes.isNotEmpty)
+                      Column(
+                        children: _selectedSizes.map((size) {
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4.0),
+                            elevation: 2.0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    size,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 50,
+                                    child: TextFormField(
+                                      textAlign: TextAlign.center,
+                                      initialValue: _sizeStocks[size]?.toString() ?? '0',
+                                      keyboardType: TextInputType.number,
+                                      decoration: InputDecoration(
+                                        border: OutlineInputBorder(),
+                                        isDense: true,
+                                      ),
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _sizeStocks[size] = int.tryParse(value) ?? 0;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                     SizedBox(height: 20),
                     _imageFile == null
                         ? Text('Henüz bir resim seçilmedi.')

@@ -12,6 +12,7 @@ import 'firebase_options.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 
 enum UserType {
   customer,  // Index 0
@@ -23,6 +24,8 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+    await FirebaseAppCheck.instance.activate();
+  
 
   runApp(MyApp());
 }
@@ -64,7 +67,7 @@ class MyApp extends StatelessWidget {
             focusedBorder: OutlineInputBorder(
               borderSide: BorderSide(color: primaryColor),
             ),
-            enabledBorder: OutlineInputBorder(
+            enabledBorder: const OutlineInputBorder(
               borderSide: BorderSide(color: Colors.grey),
             ),
           ),
@@ -160,7 +163,7 @@ class InitialRouteDecider extends StatelessWidget {
                 return HomePage();
               }
             } else {
-              return const HomePage();
+              return HomePage();
             }
           } else {
             return Center(

@@ -48,7 +48,7 @@ class OrdersPage extends StatelessWidget {
                 var orderData = order['data'];
                 var quantity = orderData['quantity'];
                 var price = orderData['price'];
-                var totalAmount = price * quantity;
+var totalAmount = (price ?? 0) * (quantity ?? 0);
 
                 return Card(
                   margin: EdgeInsets.all(10),

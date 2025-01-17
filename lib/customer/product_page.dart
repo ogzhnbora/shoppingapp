@@ -1,10 +1,13 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:finalproject/customer/firebase_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:finalproject/seller/product.dart';
 import 'package:finalproject/customer/cart_model.dart';
-import 'package:finalproject/customer/favorites_model.dart'; // Doğru yoldan emin olun
+import 'package:finalproject/customer/favorites_model.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-import 'package:google_fonts/google_fonts.dart'; // Rating bar için gerekli import
+import 'package:google_fonts/google_fonts.dart';
+import 'package:finalproject/customer/comments_page.dart';
 
 class ProductPage extends StatefulWidget {
   final Product product;
@@ -19,8 +22,9 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
   late AnimationController _controller;
   late Animation<double> _animation;
   String? selectedSize;
-  List<String> availableSizes = ["XS", "S", "M", "L", "XL", "XXL", "3XL"]; // Örnek mevcut bedenler
   bool isSizeSelectorVisible = false;
+  double averageRating = 0.0; // Ortalama puan
+  int totalReviews = 0; // Toplam yorum sayısı
 
   @override
   void initState() {
@@ -37,6 +41,7 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
         _controller.reverse();
       }
     });
+    fetchAverageRating(); // Ortalama puanı al
   }
 
   @override
@@ -45,43 +50,68 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
     super.dispose();
   }
 
-  Widget buildSizeSelector() {
+Future<void> fetchAverageRating() async {
+  try {
+    final productRef = FirebaseFirestore.instance.collection('products').doc(widget.product.id);
+    final snapshot = await productRef.get();
+
+    if (snapshot.exists) {
+      final data = snapshot.data();
+      final reviews = data?['reviews'] as List<dynamic>?;
+
+      if (reviews != null && reviews.isNotEmpty) {
+        double totalRating = 0;
+        reviews.forEach((review) {
+          totalRating += (review['rating'] as num).toDouble();
+        });
+
+        setState(() {
+          averageRating = totalRating / reviews.length; // Ortalama puan
+          totalReviews = reviews.length; // Toplam yorum sayısı
+        });
+      } else {
+        setState(() {
+          averageRating = 0.0;
+          totalReviews = 0;
+        });
+      }
+    }
+  } catch (e) {
+    print("Hata: $e");
+    setState(() {
+      averageRating = 0.0;
+      totalReviews = 0;
+    });
+  }
+}
+
+    Widget buildSizeSelector() {
     return Wrap(
       spacing: 10.0,
-      children: availableSizes.map((size) {
-        bool isAvailable = widget.product.sizes.contains(size); // Üründe mevcut olup olmadığını kontrol edin
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            ChoiceChip(
-              label: Text(size),
-              selected: selectedSize == size,
-              onSelected: isAvailable
-                  ? (selected) {
-                      setState(() {
-                        selectedSize = selected ? size : null;
-                      });
-                    }
-                  : null,
-              backgroundColor: isAvailable ? Colors.grey[200] : Colors.grey[400],
-              disabledColor: Color.fromARGB(236, 138, 135, 135),
-              selectedColor: Colors.transparent,
-              labelStyle: TextStyle(color: isAvailable ? Colors.black : Colors.white),
-              side: BorderSide(
-                color: selectedSize == size ? Color.fromARGB(255, 197, 130, 137) : Colors.transparent,
-                width: 2,
-              ),
-              showCheckmark: false, // Seçildiğinde tik işareti olmasın
-            ),
-            if (!isAvailable)
-              Positioned(
-                child: Icon(Icons.clear, color: Colors.red, size: 0),
-              ),
-          ],
+      children: widget.product.sizes.map((size) {
+        return ChoiceChip(
+          label: Text(size),
+          selected: selectedSize == size,
+          onSelected: (selected) {
+            setState(() {
+              selectedSize = selected ? size : null;
+            });
+          },
+          backgroundColor: Colors.grey[200],
+          selectedColor: const Color.fromARGB(255, 197, 130, 137),
+          labelStyle: const TextStyle(color: Colors.black),
+          side: BorderSide(
+            color: selectedSize == size
+                ? const Color.fromARGB(255, 197, 130, 137)
+                : Colors.transparent,
+            width: 2,
+          ),
+          showCheckmark: false,
         );
       }).toList(),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -103,7 +133,7 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
           ),
           textAlign: TextAlign.center,
         ),
-        centerTitle: true, // Başlığı ortalar
+        centerTitle: true,
         backgroundColor: primaryColor,
         actions: [
           IconButton(
@@ -117,8 +147,8 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('${widget.product.name} favorilerden çıkarıldı'),
-                    backgroundColor: Color.fromARGB(255, 197, 130, 137), // Arka plan rengini değiştirdik
-                    duration: Duration(seconds: 2), // Bildirimin süresini ayarlayın
+                    backgroundColor: primaryColor,
+                    duration: const Duration(seconds: 2),
                   ),
                 );
               } else {
@@ -126,8 +156,8 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('${widget.product.name} favorilere eklendi'),
-                    backgroundColor: Color.fromARGB(255, 197, 130, 137), // Arka plan rengini değiştirdik
-                    duration: Duration(seconds: 2), // Bildirimin süresini ayarlayın
+                    backgroundColor: primaryColor,
+                    duration: const Duration(seconds: 2),
                   ),
                 );
               }
@@ -140,12 +170,23 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              height: 600, // Yükseklik arttırıldı
-              width: double.infinity, // Genişlik olarak ebeveyninin genişliğini alır
-              child: Image.network(
-                widget.product.imageUrl,
-                fit: BoxFit.cover, // Resmi tam olarak kaplar
-              ),
+              height: 600,
+              width: double.infinity,
+              child: widget.product.imageUrl.isNotEmpty
+                  ? Image.network(
+                      widget.product.imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.broken_image,
+                          size: 100,
+                        );
+                      },
+                    )
+                  : const Icon(
+                      Icons.image_not_supported,
+                      size: 100,
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -154,45 +195,51 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
                 children: [
                   Text(
                     widget.product.name,
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color.fromARGB(255, 21, 16, 140)),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Color.fromARGB(255, 21, 16, 140),
+                    ),
                   ),
                   const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      RatingBar.builder(
-                        //initialRating: widget.product.rating, // Ürünün puanı
-                        minRating: 1,
-                        direction: Axis.horizontal,
-                        allowHalfRating: true,
-                        itemCount: 5,
-                        itemSize: 20.0,
-                        itemPadding: EdgeInsets.symmetric(horizontal: 2.0),
-                        itemBuilder: (context, _) => Icon(
-                          Icons.star,
-                          color: Colors.amber,
-                        ),
-                        onRatingUpdate: (rating) {
-                          // Puan güncellendiğinde yapılacak işlem
-                        },
-                        ignoreGestures: true, // Kullanıcının puanı değiştirmesini engeller
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        '(${widget.product.reviewCount})',
-                        style: TextStyle(fontSize: 16),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    widget.product.gender,
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    widget.product.fit,
-                    style: const TextStyle(fontSize: 18),
-                  ),
+                 Row(
+  children: [
+    RatingBar.builder(
+      initialRating: averageRating,
+      minRating: 1,
+      direction: Axis.horizontal,
+      allowHalfRating: false,
+      itemCount: 5,
+      itemSize: 20.0,
+      itemBuilder: (context, _) => const Icon(
+        Icons.star,
+        color: Colors.amber,
+      ),
+      onRatingUpdate: (rating) {},
+      ignoreGestures: true,
+    ),
+    const SizedBox(width: 8),
+    Text(
+      averageRating.toStringAsFixed(1),
+      style: const TextStyle(fontSize: 16),
+    ),
+    const SizedBox(width: 8),
+    GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CommentsPage(productId: widget.product.id),
+          ),
+        );
+      },
+      child: Text(
+        '($totalReviews yorum)', // Tıklanabilir yorum metni
+        style: const TextStyle(fontSize: 16, color: Colors.blue),
+      ),
+    ),
+  ],
+),
                   const SizedBox(height: 20),
                   ElevatedButton.icon(
                     onPressed: () {
@@ -200,21 +247,17 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
                         isSizeSelectorVisible = !isSizeSelectorVisible;
                       });
                     },
-                    icon: Align(
-                      alignment: Alignment.topLeft,
-                      child: Icon(Icons.arrow_drop_down),
-                    ),
+                    icon: const Icon(Icons.arrow_drop_down),
                     style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.black,
-                      backgroundColor: Color.fromARGB(255, 192, 197, 237),
-                      padding: EdgeInsets.symmetric(vertical: 15.0, horizontal: 40.0), // Boyutu arttır
+                      backgroundColor: const Color.fromARGB(255, 192, 197, 237),
+                      padding: const EdgeInsets.symmetric(vertical: 15.0, horizontal: 40.0),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8.0),
                       ),
                     ),
-                    label: Text(
+                    label: const Text(
                       'Beden',
-                      style: TextStyle(fontSize: 20), // Yazı büyüklüğü
+                      style: TextStyle(fontSize: 20),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -225,7 +268,7 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    ' \₺${widget.product.price.toStringAsFixed(2)}',
+                    '₺${widget.product.price.toStringAsFixed(2)}',
                     style: const TextStyle(fontSize: 20, color: Colors.black, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 20),
@@ -240,13 +283,13 @@ class _ProductPageState extends State<ProductPage> with SingleTickerProviderStat
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text('${widget.product.name} sepete eklendi'),
-                                  backgroundColor: Color.fromARGB(255, 197, 130, 137), // Arka plan rengini değiştirdik
-                                  duration: Duration(seconds: 1), // Bildirimin süresini ayarlayın
+                                  backgroundColor: primaryColor,
+                                  duration: const Duration(seconds: 1),
                                 ),
                               );
                             },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Color.fromARGB(255, 143, 24, 15), // Daha canlı bir renk
+                        backgroundColor: const Color.fromARGB(255, 143, 24, 15),
                         padding: const EdgeInsets.symmetric(vertical: 15.0, horizontal: 40.0),
                       ),
                       child: const Text('Sepete Ekle', style: TextStyle(fontSize: 18, color: Colors.white)),

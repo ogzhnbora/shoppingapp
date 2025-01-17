@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:finalproject/customer/nav_bar.dart';
+import 'package:finalproject/customer/app_drawer.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:finalproject/customer/product_page.dart';
 import 'package:finalproject/seller/product.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:finalproject/customer/app_drawer.dart'; // Drawer dosyasını import edin
+import 'package:finalproject/customer/nav_bar.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
-
   @override
   _HomePageState createState() => _HomePageState();
 }
@@ -17,6 +15,7 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchText = "";
   String? _selectedGender;
+  String? _selectedCategory;
 
   @override
   void initState() {
@@ -34,9 +33,10 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  void _filterByGender(String gender) {
+  void _filterProducts(String gender, String? category) {
     setState(() {
       _selectedGender = gender;
+      _selectedCategory = category; // Eğer "Tüm Ürünler" seçilmişse, null olur
     });
   }
 
@@ -57,12 +57,12 @@ class _HomePageState extends State<HomePage> {
           textAlign: TextAlign.center,
         ),
         backgroundColor: Color.fromARGB(255, 197, 130, 137),
-        automaticallyImplyLeading: true, // Üç çizgi ikonunu göstermek için
+        automaticallyImplyLeading: true,
         elevation: 0,
         centerTitle: true,
       ),
       drawer: AppDrawer(
-        onSelectGender: _filterByGender,
+        onSelectCategory: (gender, category) => _filterProducts(gender, category),
       ),
       body: Column(
         children: [
@@ -76,26 +76,43 @@ class _HomePageState extends State<HomePage> {
           ),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: _selectedGender == null
-                  ? FirebaseFirestore.instance.collection('products').snapshots()
-                  : FirebaseFirestore.instance.collection('products').where('gender', isEqualTo: _selectedGender).snapshots(),
+              stream: FirebaseFirestore.instance.collection('products').snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator());
                 }
-                if (snapshot.hasError) {
-                  return Center(child: Text('Veri alınamadı: ${snapshot.error}'));
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return Center(child: Text('Ürün bulunamadı.'));
                 }
 
                 List<DocumentSnapshot> products = snapshot.data!.docs;
 
-                // Filtreleme işlemi burada yapılacak
-                List<DocumentSnapshot> filteredProducts = _searchText.isEmpty
-                    ? products
-                    : products.where((product) {
-                        String name = (product.data() as Map<String, dynamic>)['name'].toLowerCase();
-                        return name.contains(_searchText);
-                      }).toList();
+                // Seçilen kategoriye ve cinsiyete göre filtreleme
+                if (_selectedGender != null) {
+                  if (_selectedCategory != null) {
+                    // Belirli bir kategoriye göre filtreleme
+                    products = products.where((product) {
+                      final data = product.data() as Map<String, dynamic>;
+                      return (data['gender'] == _selectedGender || data['gender'] == 'Unisex') &&
+                          data['category'] == _selectedCategory;
+                    }).toList();
+                  } else {
+                    // Tüm ürünler (sadece cinsiyete ve "Unisex" ürünlere göre filtreleme)
+                    products = products.where((product) {
+                      final data = product.data() as Map<String, dynamic>;
+                      return data['gender'] == _selectedGender || data['gender'] == 'Unisex';
+                    }).toList();
+                  }
+                }
+
+                // Arama metnine göre filtreleme
+                if (_searchText.isNotEmpty) {
+                  products = products.where((product) {
+                    final data = product.data() as Map<String, dynamic>;
+                    return (data['name'] ?? '').toLowerCase().contains(_searchText);
+                  }).toList();
+                }
 
                 return GridView.builder(
                   padding: EdgeInsets.all(10),
@@ -105,9 +122,9 @@ class _HomePageState extends State<HomePage> {
                     mainAxisSpacing: 10,
                     childAspectRatio: 0.6,
                   ),
-                  itemCount: filteredProducts.length,
+                  itemCount: products.length,
                   itemBuilder: (context, index) {
-                    DocumentSnapshot snapshot = filteredProducts[index];
+                    DocumentSnapshot snapshot = products[index];
                     Product product = Product.fromMap(snapshot.data() as Map<String, dynamic>, snapshot.id);
 
                     return InkWell(
@@ -146,7 +163,11 @@ class _HomePageState extends State<HomePage> {
                                   SizedBox(height: 5),
                                   Text(
                                     '₺${product.price}',
-                                    style: TextStyle(fontSize: 16, color: Color.fromARGB(255, 33, 31, 91), fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Color.fromARGB(255, 33, 31, 91),
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -167,7 +188,7 @@ class _HomePageState extends State<HomePage> {
       bottomNavigationBar: MyBottomNavBar(
         selectedIndex: 0,
         onTabChange: (index) {
-          // This is where you would handle changing tabs, potentially updating state
+          // Tab değişimi için ek işlemler
         },
       ),
     );

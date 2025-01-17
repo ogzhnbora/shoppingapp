@@ -3,8 +3,25 @@ import 'package:flutter/material.dart';
 import 'orders_page.dart'; // OrdersPage import edin
 import 'nav_bar.dart'; // NavBar import edin
 import 'addresses_page.dart'; // AddressesPage import edin
+import 'package:finalproject/customer/firebase_service.dart'; // FirebaseService import edin
+import 'package:finalproject/customer/review_page.dart'; // ReviewsPage için doğru import
+import 'package:finalproject/customer/reviews_list_page.dart'; // ReviewsPage için doğru import
 
-class UserPage extends StatelessWidget {
+class UserPage extends StatefulWidget {
+  @override
+  _UserPageState createState() => _UserPageState();
+}
+
+class _UserPageState extends State<UserPage> {
+  final FirebaseService _firebaseService = FirebaseService();
+  late Future<List<String>> _purchasedProductsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _purchasedProductsFuture = _firebaseService.getPurchasedProducts();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -53,7 +70,35 @@ class UserPage extends StatelessWidget {
                   },
                 ),
               ),
-              // Diğer butonlar burada eklenebilir
+           Container(
+  margin: EdgeInsets.symmetric(vertical: 10.0),
+  decoration: BoxDecoration(
+    border: Border.all(color: Colors.grey),
+    borderRadius: BorderRadius.circular(10.0),
+  ),
+  child: ListTile(
+    leading: Icon(Icons.star, color: Colors.black),
+    title: Text('Değerlendirmelerim', style: TextStyle(fontSize: 18, color: Colors.black)),
+    trailing: Icon(Icons.chevron_right, color: Colors.black),
+    onTap: () async {
+      // Satın alınan ürünlerin listesini al
+      final purchasedProducts = await _firebaseService.getPurchasedProducts();
+
+      if (purchasedProducts.isNotEmpty) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ReviewsListPage(products: purchasedProducts),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Değerlendirme yapabileceğiniz ürün bulunmamaktadır.")),
+        );
+      }
+    },
+  ),
+),
             ],
           ),
           Positioned(

@@ -105,13 +105,13 @@ class MyBottomNavBar extends StatelessWidget {
     Widget page;
     switch (index) {
       case 0:
-        page = const HomePage();
+        page = HomePage();
         break;
       case 1:
         page = const CartPage();
         break;
       case 2:
-        page = const FavoritesPage();
+        page = FavoritesPage();
         break;
       case 3:
         if (FirebaseAuth.instance.currentUser != null) {

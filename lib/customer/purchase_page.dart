@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'add_address_page.dart';
 import 'addresses_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'home_page.dart';
 
 class PurchasePage extends StatefulWidget {
@@ -47,31 +46,34 @@ class _PurchasePageState extends State<PurchasePage> {
       return;
     }
 
-    for (var item in cart.items) {
-      String sellerId = item.userID;
-      String productId = item.id; // Ürün oluşturulurken kullanılan productId
-      double price = item.price; // Ürünün fiyatı
-      int quantity = cart.getQuantity(item); // Ürünün miktarı
-      Map<String, dynamic> orderData = {
-        'userId': user.uid,
-        'userAddress': userAddress,
-        'productId': productId,
-        'sellerId': sellerId,
-        'price': price * quantity, // Toplam fiyat
-        'quantity': quantity, // Ürün miktarı
-        'orderDate': Timestamp.now(),
-        'status': 'kargoya verilmesi için bekleniyor',
+    // Ürün bilgilerini ve kullanıcı adresini topla
+    List<Map<String, dynamic>> products = cart.items.map((item) {
+      return {
+        'productId': item.id,
+        'quantity': cart.getQuantity(item),
+        'price': item.price,
+        'isReviewed': false,
       };
-      await FirebaseFirestore.instance.collection('orders').add(orderData);
-    }
+    }).toList();
+
+    // Siparişi Firebase'e ekle
+    await _firebaseService.addOrder(
+      userId: user.uid,
+      products: products,
+      userAddress: userAddress!, // Seçilen adres
+      totalPrice: cart.totalPrice + 20.0, // Toplam fiyat + kargo
+      status: 'kargoya verilmesi için bekleniyor',
+    );
 
     cart.clear();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Satın alma işlemi tamamlandı.'),
-      backgroundColor: Color.fromARGB(255, 197, 130, 137), // Arka plan rengini değiştirdik
-                                  duration: Duration(seconds: 1),
-    ));
+      const SnackBar(
+        content: Text('Satın alma işlemi tamamlandı.'),
+        backgroundColor: Color.fromARGB(255, 197, 130, 137),
+        duration: Duration(seconds: 2),
+      ),
+    );
 
     Navigator.pushAndRemoveUntil(
       context,
@@ -104,7 +106,9 @@ class _PurchasePageState extends State<PurchasePage> {
                   var product = cart.items[index];
                   var quantity = cart.getQuantity(product);
                   return ListTile(
-                    leading: Image.network(product.imageUrl),
+                    leading: product.imageUrl.isNotEmpty
+                        ? Image.network(product.imageUrl)
+                        : Icon(Icons.image_not_supported),
                     title: Text(product.name),
                     subtitle: Text('₺${(product.price * quantity).toStringAsFixed(2)} (Adet: $quantity)'),
                   );
@@ -136,7 +140,7 @@ class _PurchasePageState extends State<PurchasePage> {
                       items: userAddresses!.map((address) {
                         return DropdownMenuItem<Map<String, dynamic>>(
                           value: address,
-                          child: Text(address['title']),
+                          child: Text(address['title'] ?? 'Bilinmeyen Başlık'),
                         );
                       }).toList(),
                       onChanged: (value) {
@@ -158,16 +162,7 @@ class _PurchasePageState extends State<PurchasePage> {
                       child: Text('Tüm Adreslerim'),
                     ),
                     SizedBox(height: 20),
-                    Text('Adres Başlığı: ${userAddress!['title']}', style: TextStyle(fontSize: 18)),
-                    Text('Sokak/Cadde: ${userAddress!['street']}', style: TextStyle(fontSize: 18)),
-                    Text('Apartman No: ${userAddress!['buildingNo']}', style: TextStyle(fontSize: 18)),
-                    Text('Daire No: ${userAddress!['apartmentNo']}', style: TextStyle(fontSize: 18)),
-                    Text('Mahalle: ${userAddress!['neighborhood']}', style: TextStyle(fontSize: 18)),
-                    Text('İl: ${userAddress!['city']}', style: TextStyle(fontSize: 18)),
-                    Text('İlçe: ${userAddress!['district']}', style: TextStyle(fontSize: 18)),
-                    Text('Telefon: ${userAddress!['phone']}', style: TextStyle(fontSize: 18)),
-                    Text('İsim: ${userAddress!['name']}', style: TextStyle(fontSize: 18)),
-                    Text('Soyisim: ${userAddress!['surname']}', style: TextStyle(fontSize: 18)),
+                    ..._buildAddressDetails(userAddress!),
                   ],
                 ),
               SizedBox(height: 20),
@@ -176,14 +171,11 @@ class _PurchasePageState extends State<PurchasePage> {
               Text('Genel Toplam: ₺${total.toStringAsFixed(2)}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               SizedBox(height: 20),
               ElevatedButton(
-                onPressed: userAddress != null ? () async {
-                  await _completePurchase(context);
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (context) => HomePage()),
-                    (Route<dynamic> route) => false,
-                  );
-                } : null,
+                onPressed: userAddress != null
+                    ? () async {
+                        await _completePurchase(context);
+                      }
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Color.fromARGB(255, 27, 10, 95),
                   padding: EdgeInsets.symmetric(vertical: 15),
@@ -198,5 +190,20 @@ class _PurchasePageState extends State<PurchasePage> {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildAddressDetails(Map<String, dynamic> address) {
+    return [
+      Text('Adres Başlığı: ${address['title']}', style: TextStyle(fontSize: 18)),
+      Text('Sokak/Cadde: ${address['street']}', style: TextStyle(fontSize: 18)),
+      Text('Apartman No: ${address['buildingNo']}', style: TextStyle(fontSize: 18)),
+      Text('Daire No: ${address['apartmentNo']}', style: TextStyle(fontSize: 18)),
+      Text('Mahalle: ${address['neighborhood']}', style: TextStyle(fontSize: 18)),
+      Text('İl: ${address['city']}', style: TextStyle(fontSize: 18)),
+      Text('İlçe: ${address['district']}', style: TextStyle(fontSize: 18)),
+      Text('Telefon: ${address['phone']}', style: TextStyle(fontSize: 18)),
+      Text('İsim: ${address['name']}', style: TextStyle(fontSize: 18)),
+      Text('Soyisim: ${address['surname']}', style: TextStyle(fontSize: 18)),
+    ];
   }
 }
